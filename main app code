@@ -1,0 +1,166 @@
+dependencies {
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1'
+    implementation 'androidx.recyclerview:recyclerview:1.3.1'
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.google.android.material:material:1.10.0'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.2.1'
+}
+data class Article(
+    val title: String,
+    val description: String,
+    val url: String,
+    val urlToImage: String
+)
+
+data class NewsResponse(
+    val articles: List<Article>
+)
+import retrofit2.Call
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
+import retrofit2.http.Query
+
+interface NewsApiService {
+    @GET("v2/top-headlines")
+    fun getTopHeadlines(
+        @Query("country") country: String,
+        @Query("apiKey") apiKey: String
+    ): Call<NewsResponse>
+
+    companion object {
+        private const val BASE_URL = "https://newsapi.org/"
+
+        fun create(): NewsApiService {
+            val retrofit = Retrofit.Builder()
+                .baseUrl(BASE_URL)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+            return retrofit.create(NewsApiService::class.java)
+        }
+    }
+}
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+
+class NewsViewModel : ViewModel() {
+    private val _articles = MutableLiveData<List<Article>>()
+    val articles: LiveData<List<Article>> = _articles
+
+    private val newsApiService = NewsApiService.create()
+
+    fun fetchHeadlines(apiKey: String, country: String = "us") {
+        newsApiService.getTopHeadlines(country, apiKey).enqueue(object : Callback<NewsResponse> {
+            override fun onResponse(call: Call<NewsResponse>, response: Response<NewsResponse>) {
+                if (response.isSuccessful) {
+                    _articles.value = response.body()?.articles
+                }
+            }
+
+            override fun onFailure(call: Call<NewsResponse>, t: Throwable) {
+                _articles.value = emptyList() // Handle failure
+            }
+        })
+    }
+}
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="8dp" />
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <TextView
+        android:id="@+id/titleTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textStyle="bold"
+        android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/descriptionTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp" />
+</LinearLayout>
+[8:10 pm, 21/11/2024] Vino: import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
+
+class NewsAdapter(private val articles: List<Article>) :
+    RecyclerView.Adapter<NewsAdapter.NewsViewHolder>() {
+
+    class NewsViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val titleTextView: TextView = view.findViewById(R.id.titleTextView)
+        val descriptionTextView: TextView = view.findViewById(R.id.descriptionTextView)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): NewsViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_article, parent, false)
+        return NewsViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: NewsViewHolder, position: Int) {
+        val article = articles[position]
+        holder.titleTextView.text = article.title
+        holder.descriptionTextView.text = article.description
+    }
+
+    override fun getItemCount(): Int = articles.size
+}
+[8:10 pm, 21/11/2024] Vino: 
+import android.os.Bundle
+import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+
+class MainActivity : AppCompatActivity() {
+
+    private val viewModel: NewsViewModel by viewModels()
+    private lateinit var adapter: NewsAdapter
+    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        val recyclerView = findViewById<RecyclerView>(R.id.recyclerView)
+        swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout)
+
+        recyclerView.layoutManager = LinearLayoutManager(this)
+
+        viewModel.articles.observe(this, Observer { articles ->
+            adapter = NewsAdapter(articles)
+            recyclerView.adapter = adapter
+        })
+
+        swipeRefreshLayout.setOnRefreshListener {
+            viewModel.fetchHeadlines("YOUR_API_KEY")
+            swipeRefreshLayout.isRefreshing = false
+        }
+
+        viewModel.fetchHeadlines("YOUR_API_KEY")
+    }
+}
